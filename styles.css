@@ -1,8 +1,11 @@
-/*
+.metadata-container[data-property-count="1"]:has(.metadata-property[data-property-key="zoom"]) {
+    display: var(--metadata-visibility, initial) !important;
+}
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+.cm-sizer {
+    zoom: var(--note-zoom-level) !important;
+}
 
-If your plugin does not need CSS, delete this file.
-
-*/
+.cm-fat-cursor {
+    font-size: var(--note-zoom-level-fontsize) !important
+}

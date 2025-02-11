@@ -1,134 +1,234 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { MarkdownView, View, Plugin, FrontMatterInfo, WorkspaceLeaf } from "obsidian"
 
-// Remember to rename these classes and interfaces!
+import {
+	NoteZoomPluginSettings,
+	NoteZoomSettingTab,
+	DEFAULT_SETTINGS,
+	DEFAULT_HOTKEYS,
+	ZoomRememberOptions,
+} from "./settings"
 
-interface MyPluginSettings {
-	mySetting: string;
+import { ZoomProperty } from "./zoomProperty"
+
+export enum ZoomMethod {
+	Increment,
+	Absolute,
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
+export function newZoomEvent(zoomValue: number, zoomMethod: ZoomMethod): CustomEvent<[number, ZoomMethod]> {
+	return new CustomEvent<[number, ZoomMethod]>("zoomChanged", { detail: [zoomValue, zoomMethod] })
 }
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+export default class NoteZoomPlugin extends Plugin {
+	settings: NoteZoomPluginSettings
+	fileZooms: Record<string, number>
+	viewsWithListeners: Map<View, (event: CustomEvent) => void>
+	zoomProperties: ZoomProperty[]
+	rootElement: HTMLElement
+	// lastZoomTime: number 
 
 	async onload() {
-		await this.loadSettings();
+		await this.loadPluginData()
+		// this.lastZoomTime = 0
+		this.zoomProperties = []
+		this.propertyVisibilitySettingsChanged()
+		this.addSettingTab(new NoteZoomSettingTab(this.app, this))
 
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
-
-		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
+			id: "zoom-note-in",
+			name: "Zoom in",
+			callback: () => invokeZoomChange(1, this.latestView()),
+			hotkeys: [DEFAULT_HOTKEYS.ZoomIn],
+		})
+
+		this.addCommand({
+			id: "zoom-note-out",
+			name: "Zoom out",
+			callback: () => invokeZoomChange(-1, this.latestView()),
+			hotkeys: [DEFAULT_HOTKEYS.ZoomOut],
+		})
+
+		this.addCommand({
+			id: "reset-zoom",
+			name: "Reset zoom",
+			callback: () => invokeZoomChange(0, this.latestView())
+		})
+
+		this.app.workspace.onLayoutReady(() => {
+			this.viewsWithListeners = new Map<View, (event: CustomEvent) => void>()
+			// @ts-ignore
+			this.rootElement = (this.app.workspace.containerEl.getRootNode() as HTMLElement).documentElement
+			this.zoomEventListenersHandler()
+			this.zoomPropertiesHandler()
+		})
+	}
+
+	iterateMarkdownViews(fn: (value: WorkspaceLeaf) => void) {
+		this.app.workspace
+			.getLeavesOfType("markdown")
+			.filter((leaf) => isMarkdownFile(leaf))
+			.forEach(fn)
+	}
+
+	addNoteEventListeners(
+		openNoteIterator: (leaf: WorkspaceLeaf) => void,
+		activeChanged: () => void,
+		layoutChanged: () => void
+	) {
+		this.iterateMarkdownViews(openNoteIterator)
+		this.registerEvent(this.app.workspace.on("active-leaf-change", activeChanged))
+		this.registerEvent(this.app.workspace.on("layout-change", layoutChanged))
+	}
+
+	propertyVisibilitySettingsChanged() {
+		document.documentElement.style.setProperty("--metadata-visibility", this.settings.hideZoomProperty ? "none" : "inherit")
+	}
+
+	addZoomEventListenerToView(view: View, listener: (event: CustomEvent) => void) {
+		view.containerEl.addEventListener("zoomChanged", listener)
+		this.viewsWithListeners.set(view, listener)
+	}
+
+	zoomEventListenersHandler() {
+		const openNoteIterator = (leaf: WorkspaceLeaf) => {
+			this.addZoomEventListenerToView(leaf.view, (event: CustomEvent) =>
+				this.changeViewZoom(event.detail[0], leaf.view, event.detail[1])
+			)
+		}
+
+		// Handle changing of active note
+		const activeChanged = () => {
+			setTimeout(() => {}, 0)
+
+			const latestView = this.latestView()
+			if (latestView && isMarkdownFile(latestView) && !this.viewsWithListeners.has(latestView!)) {
+				this.addZoomEventListenerToView(latestView, (event: CustomEvent) =>
+					this.changeViewZoom(event.detail[0], latestView, event.detail[1])
+				)
 			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
+		}
 
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
+		// Handle possible closing of note
+		const layoutChanged = () => {
+			setTimeout(() => {}, 0)
+
+			let openViews: View[] = []
+			this.iterateMarkdownViews((workspaceLeaf) => {
+				if (workspaceLeaf.view) openViews.push(workspaceLeaf.view)
+			})
+
+			this.viewsWithListeners.forEach((listener, view, map) => {
+				if (!openViews.contains(view)) {
+					view.containerEl.removeEventListener("zoom", listener)
+					this.viewsWithListeners.delete(view)
 				}
+			})
+		}
+
+		this.addNoteEventListeners(openNoteIterator, activeChanged, layoutChanged)
+	}
+
+	zoomPropertiesHandler() {
+		const openNoteIterator = (leaf: WorkspaceLeaf) => {
+			if (isMarkdownFile(leaf)) this.zoomProperties.push(new ZoomProperty(leaf.view as MarkdownView, this))
+		}
+
+		// Handle changing of active note
+		const activeChanged = () => {
+			setTimeout(() => {}, 0)
+			const activeView = this.latestView() as MarkdownView | undefined
+
+			this.zoomProperties.forEach((zoomProperty) => zoomProperty.attemptInitialization())
+
+			if (
+				activeView &&
+				isMarkdownFile(activeView) &&
+				!this.zoomProperties.some((zoomProperty) => zoomProperty.markdownView === activeView)
+			) {
+				this.zoomProperties.push(new ZoomProperty(activeView, this))
 			}
-		});
+		}
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+		// Handle possible closing of note
+		const layoutChanged = () => {
+			setTimeout(() => {}, 0)
 
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
+			let openViews: MarkdownView[] = []
+			this.iterateMarkdownViews((markdownView) => {
+				if (markdownView.view) openViews.push(markdownView.view as MarkdownView)
+			})
 
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
+			const zoomPropertyViewMap = new Map()
+			this.zoomProperties.forEach((zoomProperty) => {
+				zoomPropertyViewMap.set(zoomProperty, zoomProperty.markdownView)
+			})
+
+			zoomPropertyViewMap.forEach((zoomProperty, zoomPropertyView) => {
+				if (!openViews.contains(zoomPropertyView)) this.zoomProperties.remove(zoomProperty)
+			})
+		}
+
+		this.addNoteEventListeners(openNoteIterator, activeChanged, layoutChanged)
 	}
 
-	onunload() {
-
+	latestView(): View | undefined {
+		return this.app.workspace.getMostRecentLeaf()?.view
 	}
 
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+	async onunload() {
+		// this.zoomProperties.forEach((zoomProperty) => zoomProperty.unload())
+		this.viewsWithListeners.forEach((listener, view, map) => {
+			view.containerEl.removeEventListener("zoom", listener)
+		})
+	}
+
+	async loadPluginData() {
+		const data = await this.loadData()
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, data ?? {})
 	}
 
 	async saveSettings() {
-		await this.saveData(this.settings);
+		await this.saveData(this.settings)
+	}
+
+	changeViewZoom(zoomAmount: number, view: View | undefined, method: ZoomMethod = ZoomMethod.Increment) {
+		if (!view) return
+		const style = view.containerEl.style
+		const oldZoom = parseFloat(style.getPropertyValue("--note-zoom-level")) || 1
+		const newZoom = calculateNewZoomLevel(oldZoom, zoomAmount, method)
+		style.setProperty("--note-zoom-level", newZoom.toString())
+		// this.lastZoomTime = Date.now()
+
+		const scroller = view.containerEl.querySelector(".cm-vimMode")
+		if (scroller) {
+			const cursor = scroller.querySelector(".cm-fat-cursor")
+			if (cursor) {
+				const cursorFontSize = (cursor as HTMLElement).style.getPropertyValue("font-size")
+				if (cursorFontSize) {
+					const newFontSize = parseFloat(cursorFontSize.substring(0, cursorFontSize.length - 2)) * newZoom
+					style.setProperty("--note-zoom-level-fontsize", newFontSize.toString() + "px")
+				}
+			}
+		}
+
+		this.zoomProperties
+			.filter((zoomProperty) => zoomProperty.markdownView == view)
+			.first()!
+			.zoomChanged(newZoom)
 	}
 }
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
+function calculateNewZoomLevel(zoom: number, zoomAmount: number, method: ZoomMethod = ZoomMethod.Increment): number {
+	if (zoomAmount == 0) return 1
+	if (method == ZoomMethod.Absolute) return Math.clamp(Math.round(zoomAmount * 10) / 10, 0, 1000)
+	else return Math.clamp(Math.round((zoom + zoomAmount / 10) * 10) / 10, 0, 1000)
 }
 
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
+function isMarkdownFile(file: View | WorkspaceLeaf) {
+	if (file instanceof View) return file.getViewType() === "markdown"
+	else return file.view.getViewType() === "markdown"
+}
 
-	constructor(app: App, plugin: MyPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	display(): void {
-		const {containerEl} = this;
-
-		containerEl.empty();
-
-		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
-	}
+export function invokeZoomChange(value: number, view: View | undefined, method: ZoomMethod = ZoomMethod.Increment) {
+	view?.containerEl.dispatchEvent(newZoomEvent(value, method))
 }
