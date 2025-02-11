@@ -32,4 +32,4 @@ jobs:
           gh release create "$tag" \
             --title="$tag" \
             --draft \
-            obsidian-note-zoom.zip
+            main.js manifest.json styles.css
