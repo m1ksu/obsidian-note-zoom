@@ -1,7 +1,7 @@
 {
 	"id": "note-zoom",
 	"name": "Note Zoom",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"minAppVersion": "0.15.0",
 	"description": "Zoom notes in and out, with cross-session persistence",
 	"author": "Obsidian",
