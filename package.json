@@ -5,7 +5,9 @@
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
-		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"buildWindows": "rmdir /s /q build && tsc -noEmit -skipLibCheck && node esbuild.config.mjs production && mkdir build && copy manifest.json build && copy main.js build && copy styles.css build && powershell -command \"& { Add-Type -AssemblyName 'System.IO.Compression.FileSystem'; [System.IO.Compression.ZipFile]::CreateFromDirectory('build', 'obsidian-note-zoom.zip') }\"",
+		"buildLinux": "rm -rf build && tsc -noEmit -skipLibCheck && node esbuild.config.mjs production && mkdir -p build && cp manifest.json build && cp main.js build && cp styles.css build && zip -j obsidian-note-zoom.zip build/manifest.json build/main.js build/styles.css",
+		"build": "npm run buildLinux",
 		"version": "node version-bump.mjs && git add manifest.json versions.json"
 	},
 	"keywords": [],
