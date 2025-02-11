@@ -1,0 +1,2 @@
+# Note Zoom
+Zoom in and out within notes using the provided commands or hotkeys. Ctrl+Shift++ and Ctrl+Shift+- are the default hotkeys for zooming in and out. By default, the zoom level is stored in the note's properties.
