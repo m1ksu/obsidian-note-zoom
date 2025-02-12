@@ -38,20 +38,18 @@ export default class NoteZoomPlugin extends Plugin {
 			id: "zoom-note-in",
 			name: "Zoom in",
 			callback: () => invokeZoomChange(1, this.latestView()),
-			hotkeys: [DEFAULT_HOTKEYS.ZoomIn],
 		})
 
 		this.addCommand({
 			id: "zoom-note-out",
 			name: "Zoom out",
 			callback: () => invokeZoomChange(-1, this.latestView()),
-			hotkeys: [DEFAULT_HOTKEYS.ZoomOut],
 		})
 
 		this.addCommand({
 			id: "reset-zoom",
 			name: "Reset zoom",
-			callback: () => invokeZoomChange(0, this.latestView())
+			callback: () => invokeZoomChange(this.settings.defaultZoom, this.latestView(), ZoomMethod.Absolute)
 		})
 
 		this.app.workspace.onLayoutReady(() => {

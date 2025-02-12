@@ -62,7 +62,7 @@ export class NoteZoomSettingTab extends PluginSettingTab {
 
 		this.hideZoomProperty = new Setting(containerEl)
 			.setName("Hide zoom property")
-			.setDesc("Hide the 'zoom' property, and the properties menu if it is its only property.")
+			.setDesc("Hide the \"zoom\" property, and the properties menu itself if it is its only property.")
 			.addToggle((toggle) => {
 				toggle
 					.onChange(async (value) => {
@@ -88,7 +88,7 @@ export class NoteZoomSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Default zoom amount")
-			.setDesc("Automatically zoom unzoomed notes to this multiplier, if they're not already zoomed in or out.")
+			.setDesc("Automatically zoom unzoomed notes to this multiplier, if they're not already zoomed in or out. The \"Reset zoom\" command uses this zoom value.")
 			.addTextArea((textArea) => {
 				textArea
         .setValue((this.plugin.settings.defaultZoom ?? 1).toString())
