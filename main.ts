@@ -25,7 +25,7 @@ export default class NoteZoomPlugin extends Plugin {
 	viewsWithListeners: Map<View, (event: CustomEvent) => void>
 	zoomProperties: ZoomProperty[]
 	rootElement: HTMLElement
-	// lastZoomTime: number 
+	lastZoomTime: number 
 
 	async onload() {
 		await this.loadPluginData()
@@ -195,7 +195,7 @@ export default class NoteZoomPlugin extends Plugin {
 		const oldZoom = parseFloat(style.getPropertyValue("--note-zoom-level")) || 1
 		const newZoom = calculateNewZoomLevel(oldZoom, zoomAmount, method)
 		style.setProperty("--note-zoom-level", newZoom.toString())
-		// this.lastZoomTime = Date.now()
+		this.lastZoomTime = Date.now()
 
 		const scroller = view.containerEl.querySelector(".cm-vimMode")
 		if (scroller) {

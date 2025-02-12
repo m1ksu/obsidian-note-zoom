@@ -1,5 +1,5 @@
 import { CachedMetadata, FrontMatterCache, View, MarkdownView, TFile, getFrontMatterInfo } from "obsidian"
-import { NoteZoomPluginSettings } from "./settings"
+import { NoteZoomPluginSettings, ZoomRememberOptions } from "./settings"
 import NoteZoomPlugin, { invokeZoomChange, ZoomMethod } from "./main"
 
 export class ZoomProperty {
@@ -28,7 +28,7 @@ export class ZoomProperty {
 
 		this.plugin.registerEvent(
 			this.markdownView.app.metadataCache.on("changed", async (file: TFile, data: string, cache: CachedMetadata) => {
-				// if (Date.now() < this.plugin.lastZoomTime + 1000) return
+				if (Date.now() < this.plugin.lastZoomTime + 1000) return
 				if (file == this.markdownView.file && cache.frontmatter?.hasOwnProperty(this.zoomPropertyName())) {
 					const zoom = cache.frontmatter[this.zoomPropertyName()]
 
@@ -52,6 +52,7 @@ export class ZoomProperty {
 
 	zoomChanged(newZoom: number) {
 		processFrontMatter(this.markdownView, (frontMatter) => {
+			if (this.plugin.settings.zoomRememberSetting == ZoomRememberOptions.None) return
 			if (newZoom == 1 && frontMatter?.hasOwnProperty(this.zoomPropertyName()))
 				delete frontMatter[this.zoomPropertyName()]
 			else if (frontMatter) frontMatter[this.zoomPropertyName()] = newZoom
