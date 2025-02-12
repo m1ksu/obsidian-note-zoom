@@ -7,7 +7,7 @@ Set-Content -Encoding UTF8 -Path "package.json" -Value "$($Package -replace $Reg
 Write-Output "$($Package -replace $Regex, $NewVersionLine)"
 Write-Output "Version updated to $($args[0])"
 
-npm run build
+npm run buildWindows
 git add --all
 git commit -m "Version $($args[0]) release"
 git tag -a $($args[0]) -m "$($args[0])"
