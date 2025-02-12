@@ -3,7 +3,7 @@
 	"name": "Note Zoom",
 	"version": "1.0.4",
 	"minAppVersion": "1.8.0",
-	"description": "Zoom notes in and out, with cross-session persistence",
+	"description": "Zoom notes in and out, with cross-session persistence.",
 	"author": "Obsidian",
 	"authorUrl": "mistenman",
 	"fundingUrl": "",
